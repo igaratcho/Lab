@@ -20,7 +20,7 @@ public class ShipMoveController : MonoBehaviour
 		Move,
 	}
 
-	const float	FOWARD_ANGLE			= 90.0f;
+	const float	FOWARD_ANGLE			=-90.0f;
 	const float	ARIVE_RANGE				= 3.0f;
 	const float	INCREMENT_ROT_T			= 0.02f;
 	const float LOCK_TIMER				= 2.0f;
@@ -30,8 +30,8 @@ public class ShipMoveController : MonoBehaviour
 	public float m_speed;
 	public float m_curve;
 	
-	delegate void MoveDelgate();
-	MoveDelgate ExecMove;
+	delegate void Move();
+	Move ExecMove;
 
 	MoveState	m_state;
 	Vector3		m_target_pos;
@@ -67,11 +67,21 @@ public class ShipMoveController : MonoBehaviour
 
 	void OnCollisionEnter(Collision collision) 
 	{
-//		OnCollisionStay (collision);
+		OnCollisionStay (collision);
 	}
 
 	void OnCollisionStay(Collision collision) 
 	{
+		if(IsStop == false)
+		{
+			ShipMoveController ship = collision.gameObject.GetComponent<ShipMoveController>();
+			if(ship != null)
+			{
+				CalcShipHitCollision(this, ship);
+			}
+		}
+
+/*
 		if(m_side_pos == Vector3.zero)
 		{
 			ShipMoveController opposite_ship = collision.gameObject.GetComponent<ShipMoveController> ();
@@ -104,6 +114,56 @@ public class ShipMoveController : MonoBehaviour
 				}
 			}
 		}
+*/
+	}
+
+	void CalcShipHitCollision(ShipMoveController my_ship, ShipMoveController opposite_ship)
+	{
+		Vector3 diff = opposite_ship.transform.position - my_ship.transform.position;
+
+		float dist = diff.magnitude;
+
+		float sin = diff.x / dist ;
+		float cos = diff.z / dist ;
+
+		Vector3 n_diff = diff.normalized;
+
+		Vector3 cross = Vector3.zero;
+		cross.x = n_diff.z;
+		cross.z = n_diff.x;
+
+		Vector3 n_dist = Vector3.zero;
+		n_dist.x = Mathf.Abs(sin);
+		n_dist.z = Mathf.Abs(cos);
+
+		float dot = Vector3.Dot (cross, n_dist);
+
+		float limit_low = 1.0f;
+		if(Mathf.Abs(dot) < limit_low)
+		{
+			float sign = Mathf.Sign(dot);
+			n_dist.x += sign * cross.x * limit_low;
+			n_dist.z += sign * cross.z * limit_low;
+
+			diff.x += sign * cross.x * limit_low;
+			diff.z += sign * cross.z * limit_low;
+		}
+
+		float power = 1.0f;
+
+		Vector3 my_force = Vector3.zero;
+		my_force.x = diff.x * -n_dist.x * power;
+		my_force.z = diff.z * -n_dist.z * power;
+
+		Vector3 opposite_force = Vector3.zero;
+		opposite_force.x = diff.x * n_dist.x * power;
+		opposite_force.z = diff.z * n_dist.z * power;
+
+		my_ship.AddForce (my_force, ForceMode.Acceleration);
+		opposite_ship.AddForce (opposite_force, ForceMode.Acceleration);
+
+		Debug.Log(diff + " : " +  my_force + " : " + opposite_force);
+
 	}
 
 	public bool		IsStop	{ get { return this.m_state == MoveState.Stop; } }
@@ -132,7 +192,7 @@ public class ShipMoveController : MonoBehaviour
 		this.m_next_dist	= 0.0f;
 		this.m_wait_timer	= 0.0f;
 		this.m_lock_timer	= LOCK_TIMER;
-		this.ExecMove		= MoveAlongCourse;
+		this.ExecMove		= MoveStraight;
 	}
 
 	/// <summary>
@@ -250,8 +310,6 @@ public class ShipMoveController : MonoBehaviour
 	/// </summary>
 	public void ExecFriction()
 	{
-		Debug.Log (this.rigidbody.velocity.magnitude);
-
 		if(this.rigidbody.velocity.sqrMagnitude > 0.0f)
 		{
 			float friction = IsStop ? STATIC_FRICTION : DYNAMIC_FRICTION;
