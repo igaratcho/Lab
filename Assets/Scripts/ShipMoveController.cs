@@ -14,17 +14,17 @@ public class ShipMoveController : MonoBehaviour
 	const float STATIC_FRICTION_ROT		= 0.8f;
 	#endregion.	
 
+	// 船の移動状態.
 	enum MoveState
 	{
-		Stop,
-		Move,
+		Stop,	// 停止中.
+		Move, 	// 移動中.
 	}
 
-	const float	FOWARD_ANGLE			=-90.0f;
-	const float	ARIVE_RANGE				= 3.0f;
-	const float	INCREMENT_ROT_T			= 0.02f;
-	const float LOCK_TIMER				= 2.0f;
-	const int	MAX_COURSE_POINT		= 10;
+	const float	FOWARD_ANGLE			=-90.0f;	// 前進方向の角度.
+	const float	ARIVE_RANGE				= 3.0f;		// 到着範囲.
+	const float	INCREMENT_ROT_T			= 0.02f;	// 角度補正値（1フレーム毎） .
+	const int	MAX_COURSE_POINT		= 10;		// 最大コースポイント数.
 
 	public float m_mass;
 	public float m_speed;
@@ -33,18 +33,17 @@ public class ShipMoveController : MonoBehaviour
 	delegate void Move();
 	Move ExecMove;
 
-	MoveState	m_state;
-	Vector3		m_target_pos;
-	Vector3		m_next_pos;
-	Vector3		m_side_pos;
+	MoveState	m_state;			// 船の移動状態.
+	Vector3		m_target_pos;		// 船の移動状態.
 	Quaternion	m_start_rot;		// 開始時の傾き.
 	float		m_rot_t;			// 傾きの補完率.
-	
-	Vector3[]	m_course_point;
-	int 		m_course_idx;
-	float		m_next_dist;
-	float		m_wait_timer;
-	float		m_lock_timer;
+
+	// --- コース移動時用の変数 --- //.
+	Vector3[]	m_course_point;		// コースポイント.
+	int 		m_course_idx;		// コースポイントのインデックス.
+	Vector3		m_next_pos;			// 次のコースポイント.
+	float		m_next_dist;		// 次のコースまでの距離.
+	float		m_wait_timer;		// 待ちタイマー.
 
 	// Use this for initialization
 	void Start () 
@@ -72,102 +71,74 @@ public class ShipMoveController : MonoBehaviour
 
 	void OnCollisionStay(Collision collision) 
 	{
-		if(IsStop == false)
+		if(IsMove)
 		{
-			ShipMoveController ship = collision.gameObject.GetComponent<ShipMoveController>();
-			if(ship != null)
+			ShipMoveController clash_ship = collision.gameObject.GetComponent<ShipMoveController>();
+			if(clash_ship != null)
 			{
-				CalcShipHitCollision(this, ship);
+				ApplyClashForce(this, clash_ship);
 			}
 		}
-
-/*
-		if(m_side_pos == Vector3.zero)
-		{
-			ShipMoveController opposite_ship = collision.gameObject.GetComponent<ShipMoveController> ();
-			if(opposite_ship)
-			{
-				if(m_lock_timer <= 0.0f)
-				{
-					this.m_lock_timer = LOCK_TIMER;
-
-					Vector3 opposite_pos = opposite_ship.MyPos;
-					float diff_z = opposite_pos.z - MyPos.z;
-					
-//				if(Mathf.Abs(diff_z) < 1.0f)
-//				{
-					m_wait_timer = 0.2f;
-					m_side_pos = opposite_pos;
-					
-					if(diff_z <= 0.0f)
-					{
-						m_side_pos.z += 7.0f;
-					} 
-					else 
-					{
-						m_side_pos.z -= 7.0f;
-					}
-					this.ExecMove = MoveSide;
-//				}
-				} else {
-					m_lock_timer -= Time.deltaTime;
-				}
-			}
-		}
-*/
 	}
 
-	void CalcShipHitCollision(ShipMoveController my_ship, ShipMoveController opposite_ship)
+	/// <summary>
+	/// 船衝突時の力を適用.
+	/// </summary>
+	/// <param name="ship1">船1.</param>
+	/// <param name="ship2">船2.</param>
+	/// <param name="power">力.</param>
+	void ApplyClashForce(ShipMoveController ship1, ShipMoveController ship2, float power=1.0f)
 	{
-		Vector3 diff = opposite_ship.transform.position - my_ship.transform.position;
+		Vector3 pos = ship2.transform.position - ship1.transform.position;
 
-		float dist = diff.magnitude;
+		Vector3 n_pos = pos.normalized;
 
-		float sin = diff.x / dist ;
-		float cos = diff.z / dist ;
+		Vector3 r_angle = Vector3.zero;					// 進行方向に対して直角方向のベクトル.
+		r_angle.x = n_pos.z;
+		r_angle.z = n_pos.x;
 
-		Vector3 n_diff = diff.normalized;
+		n_pos.x = Mathf.Abs (n_pos.x);
+		n_pos.z = Mathf.Abs (n_pos.z);
 
-		Vector3 cross = Vector3.zero;
-		cross.x = n_diff.z;
-		cross.z = n_diff.x;
-
-		Vector3 n_dist = Vector3.zero;
-		n_dist.x = Mathf.Abs(sin);
-		n_dist.z = Mathf.Abs(cos);
-
-		float dot = Vector3.Dot (cross, n_dist);
+		float dot = Vector3.Dot (r_angle, n_pos);
 
 		float limit_low = 1.0f;
-		if(Mathf.Abs(dot) < limit_low)
+		if(Mathf.Abs(dot) < limit_low)					// 内積が一定値未満の場合、衝突時に船がずれないため、直角方向のベクトルを加算する.
 		{
 			float sign = Mathf.Sign(dot);
-			n_dist.x += sign * cross.x * limit_low;
-			n_dist.z += sign * cross.z * limit_low;
-
-			diff.x += sign * cross.x * limit_low;
-			diff.z += sign * cross.z * limit_low;
+			n_pos.x += sign * r_angle.x * limit_low;
+			n_pos.z += sign * r_angle.z * limit_low;
+			pos.x   += sign * r_angle.x * limit_low;
+			pos.z   += sign * r_angle.z * limit_low;
 		}
 
-		float power = 1.0f;
+		Vector3 force1 = Vector3.zero;
+		force1.x = pos.x * -n_pos.x * power;
+		force1.z = pos.z * -n_pos.z * power;
 
-		Vector3 my_force = Vector3.zero;
-		my_force.x = diff.x * -n_dist.x * power;
-		my_force.z = diff.z * -n_dist.z * power;
+		Vector3 force2 = Vector3.zero;
+		force2.x = pos.x * n_pos.x * power;
+		force2.z = pos.z * n_pos.z * power;
 
-		Vector3 opposite_force = Vector3.zero;
-		opposite_force.x = diff.x * n_dist.x * power;
-		opposite_force.z = diff.z * n_dist.z * power;
-
-		my_ship.AddForce (my_force, ForceMode.Acceleration);
-		opposite_ship.AddForce (opposite_force, ForceMode.Acceleration);
-
-		Debug.Log(diff + " : " +  my_force + " : " + opposite_force);
-
+		ship1.AddForce (force1, ForceMode.Acceleration);
+		ship2.AddForce (force2, ForceMode.Acceleration);
 	}
 
+	/// <summary>
+	/// 停止中か.
+	/// </summary>
 	public bool		IsStop	{ get { return this.m_state == MoveState.Stop; } }
-	public Vector3	MyPos	{ get { return this.transform.position; } }
+
+	/// <summary>
+	/// 移動中か.
+	/// </summary>
+	public bool		IsMove	{ get { return this.m_state == MoveState.Move; } }
+
+	/// <summary>
+	/// 船の位置.
+	/// </summary>
+	/// <value>My position.</value>
+	public Vector3	ShipPos	{ get { return this.transform.position; } }
 
 	/// <summary>
 	/// ロード.
@@ -175,6 +146,8 @@ public class ShipMoveController : MonoBehaviour
 	public void Load()
 	{
 		AddRigidbody ();
+
+		AddCupsuleCollider ();
 	}
 	
 	/// <summary>
@@ -191,7 +164,6 @@ public class ShipMoveController : MonoBehaviour
 		this.m_course_idx	= 0;
 		this.m_next_dist	= 0.0f;
 		this.m_wait_timer	= 0.0f;
-		this.m_lock_timer	= LOCK_TIMER;
 		this.ExecMove		= MoveStraight;
 	}
 
@@ -200,7 +172,7 @@ public class ShipMoveController : MonoBehaviour
 	/// </summary>
 	public void Exec() 
 	{ 
-		if(IsStop == false ) 
+		if( IsMove ) 
 		{ 
 			ExecMove(); 
 		}
@@ -212,7 +184,7 @@ public class ShipMoveController : MonoBehaviour
 	/// </summary>
 	void MoveStraight()
 	{
-		Vector3 dir = this.m_target_pos - this.MyPos;
+		Vector3 dir = this.m_target_pos - this.ShipPos;
 		
 		if(IsArrived(dir))
 		{
@@ -244,7 +216,7 @@ public class ShipMoveController : MonoBehaviour
 			return;
 		}
 
-		Vector3 dir = this.m_next_pos - this.MyPos;
+		Vector3 dir = this.m_next_pos - this.ShipPos;
 
 		if (this.m_course_idx < MAX_COURSE_POINT) 
 		{
@@ -261,7 +233,7 @@ public class ShipMoveController : MonoBehaviour
 					this.m_next_pos = this.m_target_pos;
 				}
 
-				dir = m_next_pos - this.MyPos;
+				dir = m_next_pos - this.ShipPos;
 
 				this.m_next_dist = dir.sqrMagnitude;
 
@@ -284,27 +256,7 @@ public class ShipMoveController : MonoBehaviour
 
 		RotateSmothly (dir);
 	}
-
-	/// <summary>
-	/// 移動(脇道をすり抜ける).
-	/// </summary>
-	void MoveSide()
-	{
-		Vector3 dir = this.m_side_pos - this.MyPos;
-		
-		if(IsArrived(dir))
-		{
-			ExecMove = MoveAlongCourse;
-			m_side_pos = Vector3.zero;
-		} 
-		else 
-		{
-			AddForce ( dir.normalized * this.m_speed );
-			
-			RotateSmothly (dir);
-		}
-	}
-
+	
 	/// <summary>
 	/// 摩擦.
 	/// </summary>
@@ -378,11 +330,22 @@ public class ShipMoveController : MonoBehaviour
 		this.rigidbody.mass = m_mass;
 		this.rigidbody.drag = 0.1f;
 		this.rigidbody.angularDrag = 0.1f;
-//		this.rigidbody.centerOfMass = new Vector3(-3.0f, 1.0f, 0);
 		this.rigidbody.interpolation=RigidbodyInterpolation.Interpolate;
 		this.rigidbody.constraints = RigidbodyConstraints.FreezePositionY | 
 									 RigidbodyConstraints.FreezeRotationX | 
 									 RigidbodyConstraints.FreezeRotationZ ;
+	}
+
+	/// <summary>
+	/// カプセルコライダー追加.
+	/// </summary>
+	void AddCupsuleCollider()
+	{
+		MeshRenderer mesh = this.gameObject.GetComponentInChildren<MeshRenderer> ();
+		if(mesh != null)
+		{
+			mesh.gameObject.AddComponent<CapsuleCollider>();
+		}
 	}
 	
 	/// <summary>
@@ -432,7 +395,7 @@ public class ShipMoveController : MonoBehaviour
 
 	Vector3 CalcCourseCenterPos()
 	{
-		Vector3 center_pos = Vector3.Lerp (this.MyPos, this.m_target_pos, 0.5f);
+		Vector3 center_pos = Vector3.Lerp (this.ShipPos, this.m_target_pos, 0.5f);
 		center_pos.z += 10.0f * this.m_curve;
 		return center_pos;
 	}
@@ -445,7 +408,7 @@ public class ShipMoveController : MonoBehaviour
 		
 		for(int i=0; i<MAX_COURSE_POINT; i++)
 		{
-			this.m_course_point[i] = BezierCurve (this.MyPos, center_pos, this.m_target_pos, unit*i);
+			this.m_course_point[i] = BezierCurve (this.ShipPos, center_pos, this.m_target_pos, unit*i);
 		}
 	}
 
@@ -473,11 +436,7 @@ public class ShipMoveController : MonoBehaviour
 			if(GUI.Button(new Rect(50.0f, 50.0f,100.0f, 50.0f), "Damage" ))
 			{
 				m_wait_timer = 1.0f;
-
-//				Quaternion q = transform.rotation;
-//				transform.rotation = Quaternion.Euler(0.0f, q.eulerAngles.y+5.0f, 0.0f);
 				AddVelocity(m_test_damage_vel);
-//				AddForce(m_test_damage_vel, ForceMode.VelocityChange);
 			}
 		}
 	}
