@@ -16,8 +16,8 @@ public class CalcShipBottom : MonoBehaviour
 
 	void DoTest()
 	{
-		float Width		= target_pos.x;
-		float Height	= target_pos.y;	// 甲板 - 高さ.
+		float Width		=  target_pos.x;
+		float Height	= -target_pos.y;	// 甲板 - 高さ.
 
 		float rot_z = GetRotation ();
 
@@ -27,6 +27,7 @@ public class CalcShipBottom : MonoBehaviour
 		Vector3 v1 = this.transform.position;
 		v1.x += ( Height * sn + Width * cs );
 		v1.y -= ( Height * cs - Width * sn );
+		v1.z += target_pos.z;
 
 		Gizmos.color = Color.red;
 		Gizmos.DrawSphere(this.transform.position, 0.5f);
