@@ -88,7 +88,7 @@ public class NodeChecker : MonoBehaviour
 		null
 	);
 	
-	void Start () 
+	void Start ()  
 	{
 		GameObject obj = new GameObject("ROOT");
 		STARNDARD_HIERARCHY.Check (obj.transform);
