@@ -1,13 +1,13 @@
 ﻿using UnityEngine;
 using System.Collections;
 
-public class MoveController : MonoBehaviour 
+public class CircleController : MonoBehaviour 
 {
 	const int	FPS				= 30;
 	const float	FOWARD_ANGLE	=-90.0f;
 	const float	ARIVE_RANGE		= 3.0f;
 	const float	INCREMENT_ROT_T	= 0.02f;
-
+	
 	static class Time
 	{
 		public static readonly float SEC = 1.0f  * FPS;
@@ -29,7 +29,7 @@ public class MoveController : MonoBehaviour
 		{
 			return (speed * meter) / time;
 		}
-
+		
 		public static float CalcAccel(float speed, float meter, float time)
 		{
 			return (speed * meter) / (time * time);
@@ -42,45 +42,33 @@ public class MoveController : MonoBehaviour
 		Move, 	// 移動中.
 	}
 
-	#region InspectorProperty
+	#region Inspector Property.
 	[SerializeField] Vector3	m_tgt_pos;
 	[SerializeField] float		m_speed_m_s;
 	[SerializeField] float		m_accel_m_s;
+	[SerializeField] float		m_mass;
 	[SerializeField] float		m_friction;
-
+	[SerializeField] float		m_bounciness;
+	
 	[SerializeField] Vector3	m_add_force;
 	[SerializeField] Vector3	m_add_torque;
 	[SerializeField] Collider	m_collider;
 	#endregion
 
 	[SerializeField] MoveState	m_state;
-
 	[SerializeField] float		m_speed;
 	[SerializeField] float		m_accel;
 	[SerializeField] Vector3	m_force; 
 	[SerializeField] Vector3	m_torque;
+	[SerializeField] Vector3	m_collect;
+	[SerializeField] Vector3	m_reflect;
 
 	[SerializeField] Quaternion	m_start_rot;
 	[SerializeField] float		m_rot_t;
 
-	[SerializeField] float		m_mass;
-	[SerializeField] Vector3	m_collect;
-	[SerializeField] Vector3	m_reflect;
-	[SerializeField] float		m_radius;
-
-	public bool		IsStop	{ get { return this.m_state == MoveState.Stop; } }
-
-	public bool		IsMove	{ get { return this.m_state == MoveState.Move; } }
-
-	public Vector3	ShipPos	{ get { return this.transform.position; } }
-
-	public Vector3 Forward
-	{
-		get
-		{
-			return transform.right;
-		}
-	}
+	public bool IsStop { get { return m_state == MoveState.Stop; } }
+	
+	public bool IsMove { get { return m_state == MoveState.Move; } }
 
 	public Bounds Bounds
 	{
@@ -94,37 +82,32 @@ public class MoveController : MonoBehaviour
 	{
 		get
 		{
-//			return Bounds.extents.x;
-			return m_radius;
+			return Bounds.extents.x;
 		}
 	}
-	
+
 	public Vector3 Power
 	{
 		get
 		{
-//			return Forward;
+//			Vector3 dir = m_tgt_pos - transform.position;
+//			return dir.normalized ;
+//			return transform.right;
 			return m_force;
 		}
 	}
 	
-	public void ExecCollision(MoveController opposite)
+	public void OnCollison(CircleController opposite)
 	{
-		if (opposite.IsStop) 
-		{
-			Stop ();
-		}
-
 		// 1.collect
 		{
 			float r = Radius + opposite.Radius;
-			float vx = transform.position.x - opposite.transform.position.x;
-			float vz = transform.position.z - opposite.transform.position.z;
-			float len = Mathf.Sqrt (vx * vx + vz * vz);
+			float vx  = transform.position.x - opposite.transform.position.x;
+			float vz  = transform.position.z - opposite.transform.position.z;
+			float len = Mathf.Sqrt(vx * vx + vz * vz);
 			float distance = r - len;
 			
-			if (len > 0.0f)
-				len = 1.0f / len;
+			if(len > 0.0f) len = 1.0f / len;
 			vx *= len;
 			vz *= len;
 			
@@ -138,7 +121,7 @@ public class MoveController : MonoBehaviour
 		// 2.Reflect.
 		{
 			Vector3 v = opposite.transform.position - transform.position;
-			
+
 			float t1 = -(v.x * Power.x + v.z * Power.z) / (v.x * v.x + v.z * v.z);
 			float arx = Power.x + v.x * t1;
 			float arz = Power.z + v.z * t1;
@@ -154,125 +137,54 @@ public class MoveController : MonoBehaviour
 			float t4 = -(-v.z * opposite.Power.x + v.x * opposite.Power.z) / (v.z * v.z + v.x * v.x);
 			float bmx = opposite.Power.x - v.z * t4;
 			float bmz = opposite.Power.z + v.x * t4;
-			
+
 			float e = 1.0f;
 			float am = m_mass;
 			float bm = opposite.m_mass;
-			
+
 			float adx = (am * amx + bm * bmx + bmx * e * bm - amx * e * bm) / (am + bm);
 			float bdx = - e * (bmx - amx) + adx;
 			float adz = (am * amz + bm * bmz + bmz * e * bm - amz * e * bm) / (am + bm);
 			float bdz = - e * (bmz - amz) + adz;
-			
+
 			m_reflect.x += adx + arx;
 			m_reflect.z += adz + arz;
 			opposite.m_reflect.x += bdx + brx;
 			opposite.m_reflect.z += bdz + brz;
 		}
-
-/*
-		//
-		{
-			Vector3 power = Vector3.zero;
-
-			if (m_speed > 0.0f) {
-				power += (m_speed * Forward.normalized);
-			}
-			
-			if (m_force.sqrMagnitude > 0.0f) {
-				power += (m_force);
-			}
-
-			if (power.sqrMagnitude > 0.0f) {
-				Vector3 reflect = opposite.transform.position - transform.position;
-				float dot = Vector3.Dot (power.normalized, reflect.normalized);
-				power *= dot;
-
-				m_reflect += -power;
-				opposite.m_reflect += power;
-			}
-		}
-*/
 	}
 
 	public void ApplyCollision()
 	{
 		if (m_collect.magnitude > 0.0f) 
 		{
-			transform.position += m_collect*0.1f;
+//			transform.position += m_collect;
 			m_collect = Vector3.zero;
 		}
 
 		if (m_reflect.magnitude > 0.0f) 
 		{
+//			transform.position += m_reflect;
 			m_force = m_reflect;
+			m_speed = 0.0f;
 			m_reflect = Vector3.zero;
 		}
-/*
-		if (m_collect.magnitude > 0.0f) 
-		{
-			transform.position += m_collect * 0.1f;
-			m_collect = Vector3.zero;
-		}
-		
-		if (m_reflect.magnitude > 0.0f) 
-		{
-			transform.position += m_reflect;
-			m_reflect = Vector3.zero;
-		}
-*/
 	}
 
-	public void ExexMove () 
-	{
-		Move ();
-		Torque ();
-	}
-	
 	public void Move(Vector3 tgt_pos)
 	{
 		m_tgt_pos = tgt_pos;
-//		m_speed = Speed.CalcSpeed (m_speed_m_s, Meter.M, Time.SEC);
 
 		Vector3 dir = m_tgt_pos - transform.position;
-		m_force += dir.normalized * Speed.CalcSpeed (m_speed_m_s, Meter.M, Time.SEC);
+		m_force += dir.normalized*Speed.CalcSpeed (m_speed_m_s, Meter.M, Time.SEC);
 
-//		m_speed = m_speed_m_s;
 		m_start_rot = transform.rotation;
 		m_rot_t = 0.0f;
 
 		m_state = MoveState.Move;
 	}
-	
-	public void Stop()
-	{
-		m_force *= 0.0f;
-		m_state = MoveState.Stop;
-	}
 
-	public void AddForce(Vector3 force)
-	{
-		m_force += force;
-	}
-	
-	public void AddTorque(Vector3 truqe)
-	{
-		m_torque += truqe;
-	}
-
-	void Awake () 
-	{
-		m_accel		= Speed.CalcAccel (m_accel_m_s, Meter.M, Time.SEC);
-//		m_accel = m_accel_m_s;
-		m_start_rot	= Quaternion.identity;
-		m_rot_t		= 0.0f;
-		m_state		= MoveState.Stop;
-
-		Vector3 extents = Bounds.extents;
-		m_radius = Mathf.Sqrt (extents.x * extents.x + extents.z * extents.z);
-	}
-
-	void Move()
+	public void Move()
 	{
 		Vector3 dir = m_tgt_pos - transform.position;
 
@@ -284,9 +196,10 @@ public class MoveController : MonoBehaviour
 		if (IsMove) 
 		{
 			RotateSmothly (dir);
+//			transform.position += (m_speed * dir.normalized);
 			m_force += (m_accel * dir.normalized);
 		}
-		
+
 		if (m_force.sqrMagnitude > 0.0f) 
 		{
 			m_force *= m_friction;
@@ -294,13 +207,31 @@ public class MoveController : MonoBehaviour
 		}
 	}
 
-	void Torque()
+	public void Stop()
 	{
-		if (m_torque.sqrMagnitude < 0.1f)
-			return;
+		m_speed *= 0.0f;
+		m_state = MoveState.Stop;
+	}
 
-		m_torque *= m_friction;
-		transform.Rotate (m_torque);
+	public void AddForce()
+	{
+		m_force += m_add_force;
+	}
+
+	public void AddTorque()
+	{
+		m_torque += m_add_torque;
+	}
+
+	void Awake()
+	{
+		m_accel = Speed.CalcAccel (m_accel_m_s, Meter.M, Time.SEC);
+		m_state = MoveState.Stop;
+	}
+
+	bool IsArrived(Vector3 dir)
+	{
+		return (dir.sqrMagnitude < ARIVE_RANGE * ARIVE_RANGE);
 	}
 
 	void RotateSmothly(Vector3 dir)
@@ -310,33 +241,18 @@ public class MoveController : MonoBehaviour
 		m_rot_t += INCREMENT_ROT_T;
 	}
 
-	bool IsArrived(Vector3 dir)
-	{
-		return (dir.sqrMagnitude < ARIVE_RANGE * ARIVE_RANGE);
-	}
-
 	#region debug property.
 	void OnMove()
 	{
 		if (m_tgt_pos.sqrMagnitude <= 0.0f)
 			return;
-
+		
 		Move (m_tgt_pos);
 	}
-
+	
 	void OnStop()
 	{
 		Stop ();
 	}
-
-	void OnAddForce()
-	{
-		AddForce(m_add_force);
-	}
-
-	void OnAddTorque()
-	{
-		AddTorque (m_add_torque);
-	}
-	#endregion.
+	#endregion
 }
