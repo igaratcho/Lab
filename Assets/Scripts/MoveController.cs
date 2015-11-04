@@ -64,7 +64,7 @@ public class MoveController : MonoBehaviour
 	[SerializeField] float		m_rot_t;
 
 	[SerializeField] float		m_mass;
-	[SerializeField] Vector3	m_collect;
+	[SerializeField] Vector3	m_correct;
 	[SerializeField] Vector3	m_reflect;
 	[SerializeField] float		m_radius;
 
@@ -115,24 +115,42 @@ public class MoveController : MonoBehaviour
 			Stop ();
 		}
 
-		// 1.collect
+		// 1.correct
+//		{
+//			float r = Radius + opposite.Radius;
+//			float vx = transform.position.x - opposite.transform.position.x;
+//			float vz = transform.position.z - opposite.transform.position.z;
+//			float len = Mathf.Sqrt (vx * vx + vz * vz);
+//			float distance = r - len;
+//			
+//			if (len > 0.0f)
+//				len = 1.0f / len;
+//			vx *= len;
+//			vz *= len;
+//			
+//			distance /= 2.0f;
+//			m_collect.x += vx * distance;
+//			m_collect.z += vz * distance;
+//			opposite.m_collect.x -= vx * distance;
+//			opposite.m_collect.z -= vz * distance;
+//		}
 		{
+
+			// 相手との最短距離を取得.
 			float r = Radius + opposite.Radius;
-			float vx = transform.position.x - opposite.transform.position.x;
-			float vz = transform.position.z - opposite.transform.position.z;
-			float len = Mathf.Sqrt (vx * vx + vz * vz);
-			float distance = r - len;
-			
-			if (len > 0.0f)
-				len = 1.0f / len;
-			vx *= len;
-			vz *= len;
-			
-			distance /= 2.0f;
-			m_collect.x += vx * distance;
-			m_collect.z += vz * distance;
-			opposite.m_collect.x -= vx * distance;
-			opposite.m_collect.z -= vz * distance;
+			Vector3 dir = transform.position - opposite.transform.position;
+
+			// めり込んだ値を算出.
+			float distance = r - dir.magnitude;
+
+			// めり込んだ値の半分を補正値とする.
+			distance *= 0.5f;
+
+			// 補正方向.
+			Vector3 correct = dir.normalized * distance;
+
+			m_correct += correct;
+			opposite.m_correct -= correct;
 		}
 
 		// 2.Reflect.
@@ -197,15 +215,15 @@ public class MoveController : MonoBehaviour
 
 	public void ApplyCollision()
 	{
-		if (m_collect.magnitude > 0.0f) 
+		if (m_correct.magnitude > 0.0f) 
 		{
-			transform.position += m_collect*0.1f;
-			m_collect = Vector3.zero;
+			transform.position += m_correct*0.1f;
+			m_correct = Vector3.zero;
 		}
 
 		if (m_reflect.magnitude > 0.0f) 
 		{
-			m_force = m_reflect;
+//			m_force = m_reflect;
 			m_reflect = Vector3.zero;
 		}
 /*
