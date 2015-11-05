@@ -7,6 +7,7 @@ public class MoveController : MonoBehaviour
 	const float	FOWARD_ANGLE	=-90.0f;
 	const float	ARIVE_RANGE		= 3.0f;
 	const float	INCREMENT_ROT_T	= 0.02f;
+	const float CORRECT_COEF	= 0.1f;
 
 	static class Time
 	{
@@ -47,6 +48,7 @@ public class MoveController : MonoBehaviour
 	[SerializeField] float		m_speed_m_s;
 	[SerializeField] float		m_accel_m_s;
 	[SerializeField] float		m_friction;
+	[SerializeField] float		m_bounciness;
 
 	[SerializeField] Vector3	m_add_force;
 	[SerializeField] Vector3	m_add_torque;
@@ -99,7 +101,7 @@ public class MoveController : MonoBehaviour
 		}
 	}
 	
-	public Vector3 Power
+	public Vector3 Force
 	{
 		get
 		{
@@ -115,30 +117,12 @@ public class MoveController : MonoBehaviour
 			Stop ();
 		}
 
-		// 1.correct
-//		{
-//			float r = Radius + opposite.Radius;
-//			float vx = transform.position.x - opposite.transform.position.x;
-//			float vz = transform.position.z - opposite.transform.position.z;
-//			float len = Mathf.Sqrt (vx * vx + vz * vz);
-//			float distance = r - len;
-//			
-//			if (len > 0.0f)
-//				len = 1.0f / len;
-//			vx *= len;
-//			vz *= len;
-//			
-//			distance /= 2.0f;
-//			m_collect.x += vx * distance;
-//			m_collect.z += vz * distance;
-//			opposite.m_collect.x -= vx * distance;
-//			opposite.m_collect.z -= vz * distance;
-//		}
-		{
+		Vector3 dir = opposite.transform.position - transform.position;
 
+		// ------------------- 位置補正 ------------------- //.
+		{
 			// 相手との最短距離を取得.
 			float r = Radius + opposite.Radius;
-			Vector3 dir = transform.position - opposite.transform.position;
 
 			// めり込んだ値を算出.
 			float distance = r - dir.magnitude;
@@ -149,96 +133,62 @@ public class MoveController : MonoBehaviour
 			// 補正方向.
 			Vector3 correct = dir.normalized * distance;
 
-			m_correct += correct;
-			opposite.m_correct -= correct;
+			// 調整用係数.
+			correct *= CORRECT_COEF;
+
+			// 値を反映.
+			m_correct -= correct;
+			opposite.m_correct += correct;
 		}
 
-		// 2.Reflect.
+		// ------------------- 反射 ------------------- //.
 		{
-			Vector3 v = opposite.transform.position - transform.position;
-			
-			float t1 = -(v.x * Power.x + v.z * Power.z) / (v.x * v.x + v.z * v.z);
-			float arx = Power.x + v.x * t1;
-			float arz = Power.z + v.z * t1;
-			
-			float t2 = -(-v.z * Power.x + v.x * Power.z) / (v.z * v.z + v.x * v.x);
-			float amx = Power.x - v.z * t2;
-			float amz = Power.z + v.x * t2;
-			
-			float t3 = -(v.x * opposite.Power.x + v.z * opposite.Power.z) / (v.x * v.x + v.z * v.z);
-			float brx = opposite.Power.x + v.x * t3;
-			float brz = opposite.Power.z + v.z * t3;
-			
-			float t4 = -(-v.z * opposite.Power.x + v.x * opposite.Power.z) / (v.z * v.z + v.x * v.x);
-			float bmx = opposite.Power.x - v.z * t4;
-			float bmz = opposite.Power.z + v.x * t4;
-			
-			float e = 1.0f;
+			// 相手への向きを正規化.
+			Vector3 n_dir = dir.normalized;
+
+			// 力の向き.
+			Vector3 force_a = Force;
+			Vector3 force_b = opposite.Force; 
+
+			// 相手への向きと、力の向きとの内積を求める.
+			float dot_a = Vector3.Dot (force_a, n_dir);
+			float dot_b = Vector3.Dot (force_b, n_dir);
+
+			// 新たな力の向き = 力の向き - (相手への向き * 内積値) を求める (※力と相手へ向きが同じ場合は0になる).
+			Vector3 new_force_a = force_a - (n_dir * dot_a);
+			Vector3 new_force_b = force_b - (n_dir * dot_b);
+
+			// 質量.
 			float am = m_mass;
 			float bm = opposite.m_mass;
-			
-			float adx = (am * amx + bm * bmx + bmx * e * bm - amx * e * bm) / (am + bm);
-			float bdx = - e * (bmx - amx) + adx;
-			float adz = (am * amz + bm * bmz + bmz * e * bm - amz * e * bm) / (am + bm);
-			float bdz = - e * (bmz - amz) + adz;
-			
-			m_reflect.x += adx + arx;
-			m_reflect.z += adz + arz;
-			opposite.m_reflect.x += bdx + brx;
-			opposite.m_reflect.z += bdz + brz;
+
+			// 弾性係数,
+			float ae = m_bounciness;
+			float be = opposite.m_bounciness;
+
+			// 反発力を求める
+			float reflect_power_a = (am * dot_a + bm * dot_b - bm * ae * (dot_a - dot_b) ) / (am + bm);
+			float reflect_power_b = (am * dot_a + bm * dot_b + am * be * (dot_a - dot_b) ) / (am + bm);
+
+			// 値を反映.
+			m_reflect = new_force_a + (n_dir * reflect_power_a);
+			opposite.m_reflect = new_force_b + (n_dir * reflect_power_b);
 		}
-
-/*
-		//
-		{
-			Vector3 power = Vector3.zero;
-
-			if (m_speed > 0.0f) {
-				power += (m_speed * Forward.normalized);
-			}
-			
-			if (m_force.sqrMagnitude > 0.0f) {
-				power += (m_force);
-			}
-
-			if (power.sqrMagnitude > 0.0f) {
-				Vector3 reflect = opposite.transform.position - transform.position;
-				float dot = Vector3.Dot (power.normalized, reflect.normalized);
-				power *= dot;
-
-				m_reflect += -power;
-				opposite.m_reflect += power;
-			}
-		}
-*/
 	}
 
 	public void ApplyCollision()
 	{
 		if (m_correct.magnitude > 0.0f) 
 		{
-			transform.position += m_correct*0.1f;
+			transform.position += m_correct;
 			m_correct = Vector3.zero;
 		}
 
 		if (m_reflect.magnitude > 0.0f) 
 		{
-//			m_force = m_reflect;
+			m_force = m_reflect;
 			m_reflect = Vector3.zero;
 		}
-/*
-		if (m_collect.magnitude > 0.0f) 
-		{
-			transform.position += m_collect * 0.1f;
-			m_collect = Vector3.zero;
-		}
-		
-		if (m_reflect.magnitude > 0.0f) 
-		{
-			transform.position += m_reflect;
-			m_reflect = Vector3.zero;
-		}
-*/
 	}
 
 	public void ExexMove () 
@@ -250,12 +200,11 @@ public class MoveController : MonoBehaviour
 	public void Move(Vector3 tgt_pos)
 	{
 		m_tgt_pos = tgt_pos;
-//		m_speed = Speed.CalcSpeed (m_speed_m_s, Meter.M, Time.SEC);
+		m_speed = Speed.CalcSpeed (m_speed_m_s, Meter.M, Time.SEC);
 
 		Vector3 dir = m_tgt_pos - transform.position;
 		m_force += dir.normalized * Speed.CalcSpeed (m_speed_m_s, Meter.M, Time.SEC);
 
-//		m_speed = m_speed_m_s;
 		m_start_rot = transform.rotation;
 		m_rot_t = 0.0f;
 
@@ -264,7 +213,7 @@ public class MoveController : MonoBehaviour
 	
 	public void Stop()
 	{
-		m_force *= 0.0f;
+//		m_force *= 0.5f;
 		m_state = MoveState.Stop;
 	}
 
@@ -281,7 +230,6 @@ public class MoveController : MonoBehaviour
 	void Awake () 
 	{
 		m_accel		= Speed.CalcAccel (m_accel_m_s, Meter.M, Time.SEC);
-//		m_accel = m_accel_m_s;
 		m_start_rot	= Quaternion.identity;
 		m_rot_t		= 0.0f;
 		m_state		= MoveState.Stop;
@@ -302,12 +250,12 @@ public class MoveController : MonoBehaviour
 		if (IsMove) 
 		{
 			RotateSmothly (dir);
-			m_force += (m_accel * dir.normalized);
+			m_force += (m_accel * dir.normalized);	// @note 加速度は可変フレームへの対応が必要.
 		}
 		
 		if (m_force.sqrMagnitude > 0.0f) 
 		{
-			m_force *= m_friction;
+			m_force *= IsMove ? m_friction : 0.8f ;	// @note 摩擦力は可変フレームへの対応が必要.
 			transform.position += m_force;
 		}
 	}

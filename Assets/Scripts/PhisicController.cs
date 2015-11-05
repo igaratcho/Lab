@@ -23,15 +23,18 @@ public class PhisicController : MonoBehaviour
 	{
 		for (int i=0; i<m_move_ctrls.Length; i++) 
 		{
-			for(int j=0; j<m_move_ctrls.Length; j++)
+			for(int j=i; j<m_move_ctrls.Length; j++)
 			{
-				if(i == j) continue;
-
 				if(m_move_ctrls[i].Bounds.Intersects(m_move_ctrls[j].Bounds))
 				{
 					m_move_ctrls[i].ExecCollision(m_move_ctrls[j]);
 				}
 			}
+		}
+
+		for (int i=0; i<m_move_ctrls.Length; i++) 
+		{
+			m_move_ctrls[i].ApplyCollision();
 		}
 	}
 
